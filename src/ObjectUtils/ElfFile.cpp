@@ -102,7 +102,7 @@ template <typename ElfT>
 ErrorMessageOr<GnuDebugLinkInfo> ReadGnuDebuglinkSection(
     const typename ElfT::Shdr& section_header, const llvm::object::ELFFile<ElfT>& elf_file) {
   llvm::Expected<llvm::ArrayRef<uint8_t>> contents_or_error =
-      elf_file.getSectionContents(&section_header);
+      elf_file.getSectionContents(section_header);
   if (!contents_or_error) return ErrorMessage("Could not obtain contents.");
 
   const llvm::ArrayRef<uint8_t>& contents = contents_or_error.get();
@@ -164,8 +164,8 @@ ErrorMessageOr<void> ElfFileImpl<ElfT>::Initialize() {
 
 template <typename ElfT>
 ErrorMessageOr<void> ElfFileImpl<ElfT>::InitDynamicEntries() {
-  const llvm::object::ELFFile<ElfT>* elf_file = object_file_->getELFFile();
-  auto dynamic_entries_or_error = elf_file->dynamicEntries();
+  const llvm::object::ELFFile<ElfT>& elf_file = object_file_->getELFFile();
+  auto dynamic_entries_or_error = elf_file.dynamicEntries();
   if (!dynamic_entries_or_error) {
     auto error_message =
         absl::StrFormat("Unable to get dynamic entries from \"%s\": %s", file_path_.string(),
@@ -200,8 +200,8 @@ ErrorMessageOr<void> ElfFileImpl<ElfT>::InitDynamicEntries() {
     return outcome::success();
   }
 
-  auto strtab_last_byte_or_error = elf_file->toMappedAddr(dynamic_string_table_addr.value() +
-                                                          dynamic_string_table_size.value() - 1);
+  auto strtab_last_byte_or_error = elf_file.toMappedAddr(dynamic_string_table_addr.value() +
+                                                         dynamic_string_table_size.value() - 1);
   if (!strtab_last_byte_or_error) {
     auto error_message =
         absl::StrFormat("Unable to get last byte address of dynamic string table \"%s\": %s",
@@ -226,7 +226,7 @@ ErrorMessageOr<void> ElfFileImpl<ElfT>::InitDynamicEntries() {
     return ErrorMessage{error_message};
   }
 
-  auto strtab_addr_or_error = elf_file->toMappedAddr(dynamic_string_table_addr.value());
+  auto strtab_addr_or_error = elf_file.toMappedAddr(dynamic_string_table_addr.value());
   if (!strtab_addr_or_error) {
     auto error_message =
         absl::StrFormat("Unable to get dynamic string table from DT_STRTAB in \"%s\": %s",
@@ -242,9 +242,9 @@ ErrorMessageOr<void> ElfFileImpl<ElfT>::InitDynamicEntries() {
 
 template <typename ElfT>
 ErrorMessageOr<void> ElfFileImpl<ElfT>::InitSections() {
-  const llvm::object::ELFFile<ElfT>* elf_file = object_file_->getELFFile();
+  const llvm::object::ELFFile<ElfT>& elf_file = object_file_->getELFFile();
 
-  llvm::Expected<typename ElfT::ShdrRange> sections_or_error = elf_file->sections();
+  llvm::Expected<typename ElfT::ShdrRange> sections_or_error = elf_file.sections();
   if (!sections_or_error) {
     auto error_message = absl::StrFormat("Unable to load sections: %s",
                                          llvm::toString(sections_or_error.takeError()));
@@ -253,7 +253,7 @@ ErrorMessageOr<void> ElfFileImpl<ElfT>::InitSections() {
   }
 
   for (const typename ElfT::Shdr& section : sections_or_error.get()) {
-    llvm::Expected<llvm::StringRef> name_or_error = elf_file->getSectionName(&section);
+    llvm::Expected<llvm::StringRef> name_or_error = elf_file.getSectionName(section);
     if (!name_or_error) {
       return ErrorMessage{absl::StrFormat("Unable to get section name: %s",
                                           llvm::toString(name_or_error.takeError()))};
@@ -277,7 +277,7 @@ ErrorMessageOr<void> ElfFileImpl<ElfT>::InitSections() {
 
     if (name.str() == ".note.gnu.build-id" && section.sh_type == llvm::ELF::SHT_NOTE) {
       llvm::Error error = llvm::Error::success();
-      for (const typename ElfT::Note& note : elf_file->notes(section, error)) {
+      for (const typename ElfT::Note& note : elf_file.notes(section, error)) {
         if (note.getType() != llvm::ELF::NT_GNU_BUILD_ID) continue;
 
         llvm::ArrayRef<uint8_t> desc = note.getDesc();
@@ -293,7 +293,7 @@ ErrorMessageOr<void> ElfFileImpl<ElfT>::InitSections() {
     }
 
     if (name.str() == ".gnu_debuglink") {
-      ErrorMessageOr<GnuDebugLinkInfo> error_or_info = ReadGnuDebuglinkSection(section, *elf_file);
+      ErrorMessageOr<GnuDebugLinkInfo> error_or_info = ReadGnuDebuglinkSection(section, elf_file);
       if (error_or_info.has_value()) {
         gnu_debuglink_info_ = std::move(error_or_info.value());
       } else {
@@ -310,25 +310,46 @@ ErrorMessageOr<void> ElfFileImpl<ElfT>::InitSections() {
 template <typename ElfT>
 ErrorMessageOr<SymbolInfo> ElfFileImpl<ElfT>::CreateSymbolInfo(
     const llvm::object::ELFSymbolRef& symbol_ref) {
-  if ((symbol_ref.getFlags() & llvm::object::BasicSymbolRef::SF_Undefined) != 0) {
+  std::string name;
+  if (auto maybe_name = symbol_ref.getName(); maybe_name) name = maybe_name.get().str();
+
+  llvm::Expected<uint32_t> maybe_flags = symbol_ref.getFlags();
+  if (!maybe_flags) {
+    LOG("WARNING: Flags are not set for symbol \"%s\" in \"%s\", skipping.", name,
+        file_path_.string());
+    return ErrorMessage(absl::StrFormat(R"(Flags are not set for symbol "%s" in "%s", skipping.)",
+                                        name, file_path_.string()));
+  }
+
+  if ((maybe_flags.get() & llvm::object::BasicSymbolRef::SF_Undefined) != 0) {
     return ErrorMessage("Symbol is defined in another object file (SF_Undefined flag is set).");
   }
-  const std::string name = symbol_ref.getName() ? symbol_ref.getName().get() : "";
+
   // Unknown type - skip and generate a warning.
-  if (!symbol_ref.getType()) {
+  llvm::Expected<llvm::object::SymbolRef::Type> maybe_type = symbol_ref.getType();
+  if (!maybe_type) {
     LOG("WARNING: Type is not set for symbol \"%s\" in \"%s\", skipping.", name,
         file_path_.string());
     return ErrorMessage(absl::StrFormat(R"(Type is not set for symbol "%s" in "%s", skipping.)",
                                         name, file_path_.string()));
   }
   // Limit list of symbols to functions. Ignore sections and variables.
-  if (symbol_ref.getType().get() != llvm::object::SymbolRef::ST_Function) {
+  if (maybe_type.get() != llvm::object::SymbolRef::ST_Function) {
     return ErrorMessage("Symbol is not a function.");
   }
+
+  llvm::Expected<uint64_t> maybe_value = symbol_ref.getValue();
+  if (!maybe_value) {
+    LOG("WARNING: Address is not set for symbol \"%s\" in \"%s\", skipping.", name,
+        file_path_.string());
+    return ErrorMessage(absl::StrFormat(R"(Address is not set for symbol "%s" in "%s", skipping.)",
+                                        name, file_path_.string()));
+  }
+
   SymbolInfo symbol_info;
   symbol_info.set_name(name);
   symbol_info.set_demangled_name(llvm::demangle(name));
-  symbol_info.set_address(symbol_ref.getValue());
+  symbol_info.set_address(maybe_value.get());
   symbol_info.set_size(symbol_ref.getSize());
   return symbol_info;
 }
@@ -390,8 +411,8 @@ uint64_t ElfFileImpl<ElfT>::GetLoadBias() const {
 
 template <typename ElfT>
 ErrorMessageOr<void> ElfFileImpl<ElfT>::InitProgramHeaders() {
-  const llvm::object::ELFFile<ElfT>* elf_file = object_file_->getELFFile();
-  llvm::Expected<typename ElfT::PhdrRange> range = elf_file->program_headers();
+  const llvm::object::ELFFile<ElfT>& elf_file = object_file_->getELFFile();
+  llvm::Expected<typename ElfT::PhdrRange> range = elf_file.program_headers();
 
   if (!range) {
     std::string error = absl::StrFormat(
@@ -466,12 +487,14 @@ const std::filesystem::path& ElfFileImpl<ElfT>::GetFilePath() const {
 template <typename ElfT>
 ErrorMessageOr<LineInfo> orbit_object_utils::ElfFileImpl<ElfT>::GetLineInfo(uint64_t address) {
   CHECK(has_debug_info_section_);
-  auto line_info_or_error = symbolizer_.symbolizeInlinedCode(
-      object_file_->getFileName(), {address, llvm::object::SectionedAddress::UndefSection});
+  auto line_info_or_error =
+      symbolizer_.symbolizeInlinedCode(std::string{object_file_->getFileName()},
+                                       {address, llvm::object::SectionedAddress::UndefSection});
   if (!line_info_or_error) {
-    return ErrorMessage(absl::StrFormat(
-        "Unable to get line number info for \"%s\", address=0x%x: %s", object_file_->getFileName(),
-        address, llvm::toString(line_info_or_error.takeError())));
+    return ErrorMessage(
+        absl::StrFormat("Unable to get line number info for \"%s\", address=0x%x: %s",
+                        std::string{object_file_->getFileName()}, address,
+                        llvm::toString(line_info_or_error.takeError())));
   }
 
   auto& symbolizer_line_info = line_info_or_error.get();
@@ -628,7 +651,7 @@ ErrorMessageOr<uint32_t> ElfFile::CalculateDebuglinkChecksum(
   }
 
   constexpr size_t kBufferSize = 4 * 1024 * 1024;  // 4 MiB
-  std::vector<char> buffer(kBufferSize);
+  std::vector<unsigned char> buffer(kBufferSize);
 
   uint32_t rolling_checksum = 0;
 
@@ -639,7 +662,7 @@ ErrorMessageOr<uint32_t> ElfFile::CalculateDebuglinkChecksum(
 
     if (chunksize_or_error.value() == 0) break;
 
-    const llvm::StringRef str{buffer.data(), chunksize_or_error.value()};
+    const llvm::ArrayRef<unsigned char> str{buffer.data(), chunksize_or_error.value()};
     rolling_checksum = llvm::crc32(rolling_checksum, str);
   }
 
