@@ -1,5 +1,11 @@
 [settings]
 cmake_installer:build_type=Release
+cmake:build_type=Release
+cmake:os=Linux
+cmake:os.platform=None
+cmake:os_build=Linux
+cmake:arch=x86_64
+cmake:arch_build=x86_64
 
 [build_requires]
 &: cmake_installer/3.16.3@conan/stable
