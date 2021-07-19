@@ -290,14 +290,14 @@ TEST(TrampolineTest, AllocateMemoryForTrampolines) {
 
   // Allocate one megabyte in the tracee. The memory will be close to `code_range`.
   constexpr uint64_t kTrampolineSize = 1024 * 1024;
-  auto address_or_error = AllocateMemoryForTrampolines(pid, code_range, kTrampolineSize);
-  ASSERT_FALSE(address_or_error.has_error());
+  auto memory_or_error = AllocateMemoryForTrampolines(pid, code_range, kTrampolineSize);
+  ASSERT_FALSE(memory_or_error.has_error());
 
   // Check that the tracee is functional: Continue, stop again, free the allocated memory, then run
   // briefly again.
   CHECK(DetachAndContinueProcess(pid).has_value());
   CHECK(AttachAndStopProcess(pid).has_value());
-  ASSERT_FALSE(FreeInTracee(pid, address_or_error.value(), kTrampolineSize).has_error());
+  ASSERT_THAT(memory_or_error.value().Free(), HasNoError());
   CHECK(DetachAndContinueProcess(pid).has_value());
   CHECK(AttachAndStopProcess(pid).has_value());
 
@@ -626,15 +626,17 @@ class InstrumentFunctionTest : public testing::Test {
     auto trampoline_or_error =
         AllocateMemoryForTrampolines(pid_, address_range_code, max_trampoline_size_);
     CHECK(!trampoline_or_error.has_error());
-    trampoline_address_ = trampoline_or_error.value();
+    trampoline_memory_ = std::move(trampoline_or_error.value());
+    trampoline_address_ = trampoline_memory_.GetAddress();
 
     // Get memory for return trampoline and create the return trampoline.
-    auto return_trampoline_or_error = AllocateInTracee(pid_, 0, GetReturnTrampolineSize());
-    CHECK(!return_trampoline_or_error.has_error());
-    return_trampoline_address_ = return_trampoline_or_error.value();
-    auto result = CreateReturnTrampoline(pid_, exit_payload_function_address_,
-                                         return_trampoline_or_error.value());
+    MemoryInTracee return_trampoline;
+    CHECK(!return_trampoline.Allocate(pid_, 0, GetReturnTrampolineSize()).has_error());
+    return_trampoline_address_ = return_trampoline.GetAddress();
+    auto result =
+        CreateReturnTrampoline(pid_, exit_payload_function_address_, return_trampoline_address_);
     CHECK(!result.has_error());
+    CHECK(!return_trampoline.MakeMemoryExecutable().has_error());
 
     // Copy the beginning of the function over into this process.
     constexpr uint64_t kMaxFunctionPrologueBackupSize = 20;
@@ -648,6 +650,8 @@ class InstrumentFunctionTest : public testing::Test {
   // Runs the child for a millisecond to assert it is still working fine, stops it, removes the
   // instrumentation, restarts and stops it again.
   void RestartAndRemoveInstrumentation() {
+    CHECK(!trampoline_memory_.MakeMemoryExecutable().has_error());
+
     MoveInstructionPointersOutOfOverwrittenCode(pid_, relocation_map_);
 
     CHECK(!DetachAndContinueProcess(pid_).has_error());
@@ -676,6 +680,7 @@ class InstrumentFunctionTest : public testing::Test {
   pid_t pid_ = -1;
   csh capstone_handle_ = 0;
   uint64_t max_trampoline_size_ = 0;
+  MemoryInTracee trampoline_memory_;
   uint64_t trampoline_address_;
   uint64_t return_trampoline_address_;
   uint64_t entry_payload_function_address_;

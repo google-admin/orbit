@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "AddressRange.h"
+#include "AllocateInTracee.h"
 #include "OrbitBase/Result.h"
 
 namespace orbit_user_space_instrumentation {
@@ -54,9 +55,8 @@ namespace orbit_user_space_instrumentation {
 // Allocates `size` bytes in the tracee close to `code_range`. The memory segment will be placed
 // such that we can jump from any position in the memory segment to any position in `code_range`
 // (and vice versa) by relative jumps using 32 bit offsets.
-[[nodiscard]] ErrorMessageOr<uint64_t> AllocateMemoryForTrampolines(pid_t pid,
-                                                                    const AddressRange& code_range,
-                                                                    uint64_t size);
+[[nodiscard]] ErrorMessageOr<MemoryInTracee> AllocateMemoryForTrampolines(
+    pid_t pid, const AddressRange& code_range, uint64_t size);
 
 // Returns the signed 32 bit difference (a-b) between two absolute virtual 64 bit addresses or an
 // error if the difference is too large.
