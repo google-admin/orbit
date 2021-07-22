@@ -111,6 +111,37 @@ void CaptureData::UpdateFunctionStats(uint64_t instrumented_function_id, uint64_
   }
 }
 
+void CaptureData::OnCaptureComplete(std::vector<orbit_client_data::TimerChain*> chains) {
+  // Recalculate standard deviation as the running calculation may have introduced error.
+  for (auto& pair : functions_stats_) {
+    FunctionStats& stats = pair.second;
+    stats.set_variance_ns(0);
+  }
+
+  for (auto& chain : chains) {
+    if (!chain) continue;
+    for (const auto& block : *chain) {
+      for (uint64_t i = 0; i < block.size(); i++) {
+        const orbit_client_protos::TimerInfo& timer_info = block[i];
+        auto& stats = functions_stats_[timer_info.function_id()];
+        if (stats.count() > 0) {
+          uint64_t elapsed_nanos = timer_info.end() - timer_info.start();
+          uint64_t diff = elapsed_nanos - stats.average_time_ns();
+          stats.set_variance_ns(stats.variance_ns() + diff * diff);
+        }
+      }
+    }
+  }
+
+  for (auto& pair : functions_stats_) {
+    FunctionStats& stats = pair.second;
+    if (stats.count() > 0) {
+      stats.set_variance_ns(stats.variance_ns() / static_cast<double>(stats.count()));
+      stats.set_std_dev_ns(static_cast<uint64_t>(sqrt(stats.variance_ns())));
+    }
+  }
+}
+
 const InstrumentedFunction* CaptureData::GetInstrumentedFunctionById(uint64_t function_id) const {
   auto instrumented_functions_it = instrumented_functions_.find(function_id);
   if (instrumented_functions_it == instrumented_functions_.end()) {
