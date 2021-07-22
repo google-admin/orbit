@@ -79,17 +79,17 @@ ErrorMessageOr<uint64_t> FindFunctionAddressWithFallback(pid_t pid, std::string_
   // Allocate small memory area in the tracee. This is used for the code and the path name.
   const uint64_t path_length = path.string().length() + 1;  // Include terminating zero.
   const uint64_t memory_size = kCodeScratchPadSize + path_length;
-  auto code_address_or_error = AllocateInTraceeAsUniqueResource(pid, 0, memory_size);
-  if (code_address_or_error.has_error()) {
+  auto code_memory_or_error = AllocateInTraceeAsUniqueResource(pid, 0, memory_size);
+  if (code_memory_or_error.has_error()) {
     return ErrorMessage(absl::StrFormat("Failed to allocate memory in tracee: %s",
-                                        code_address_or_error.error().message()));
+                                        code_memory_or_error.error().message()));
   }
-  auto code_address = std::move(code_address_or_error.value());
+  auto code_memory = std::move(code_memory_or_error.value());
 
-  // Write the name of the .so into memory at code_address with offset of kCodeScratchPadSize.
+  // Write the name of the .so into memory at code_memory with offset of kCodeScratchPadSize.
   std::vector<uint8_t> path_as_vector(path_length);
   memcpy(path_as_vector.data(), path.c_str(), path_length);
-  const uint64_t so_path_address = code_address.get() + kCodeScratchPadSize;
+  const uint64_t so_path_address = code_memory.get_mutable().GetAddress() + kCodeScratchPadSize;
   auto write_memory_result = WriteTraceesMemory(pid, so_path_address, path_as_vector);
   if (write_memory_result.has_error()) {
     return write_memory_result.error();
@@ -117,7 +117,7 @@ ErrorMessageOr<uint64_t> FindFunctionAddressWithFallback(pid_t pid, std::string_
       .AppendBytes({0xff, 0xd0})
       .AppendBytes({0xcc});
 
-  OUTCOME_TRY(return_value, ExecuteMachineCode(pid, code_address.get(), code));
+  OUTCOME_TRY(return_value, ExecuteMachineCode(code_memory.get_mutable(), code));
 
   return absl::bit_cast<void*>(return_value);
 }
@@ -131,17 +131,17 @@ ErrorMessageOr<uint64_t> FindFunctionAddressWithFallback(pid_t pid, std::string_
   // Allocate small memory area in the tracee. This is used for the code and the symbol name.
   const size_t symbol_name_length = symbol.length() + 1;  // include terminating zero
   const uint64_t memory_size = kCodeScratchPadSize + symbol_name_length;
-  auto code_address_or_error = AllocateInTraceeAsUniqueResource(pid, 0, memory_size);
-  if (code_address_or_error.has_error()) {
+  auto code_memory_or_error = AllocateInTraceeAsUniqueResource(pid, 0, memory_size);
+  if (code_memory_or_error.has_error()) {
     return ErrorMessage(absl::StrFormat("Failed to allocate memory in tracee: %s",
-                                        code_address_or_error.error().message()));
+                                        code_memory_or_error.error().message()));
   }
-  auto code_address = std::move(code_address_or_error.value());
+  auto code_memory = std::move(code_memory_or_error.value());
 
-  // Write the name of symbol into memory at code_address with offset of kCodeScratchPadSize.
+  // Write the name of symbol into memory at code_memory with offset of kCodeScratchPadSize.
   std::vector<uint8_t> symbol_name_as_vector(symbol_name_length, 0);
   memcpy(symbol_name_as_vector.data(), symbol.data(), symbol.length());
-  const uint64_t symbol_name_address = code_address.get() + kCodeScratchPadSize;
+  const uint64_t symbol_name_address = code_memory.get_mutable().GetAddress() + kCodeScratchPadSize;
   auto write_memory_result = WriteTraceesMemory(pid, symbol_name_address, symbol_name_as_vector);
   if (write_memory_result.has_error()) {
     return write_memory_result.error();
@@ -169,7 +169,7 @@ ErrorMessageOr<uint64_t> FindFunctionAddressWithFallback(pid_t pid, std::string_
       .AppendBytes({0xff, 0xd0})
       .AppendBytes({0xcc});
 
-  OUTCOME_TRY(return_value, ExecuteMachineCode(pid, code_address.get(), code));
+  OUTCOME_TRY(return_value, ExecuteMachineCode(code_memory.get_mutable(), code));
 
   return absl::bit_cast<void*>(return_value);
 }
@@ -180,12 +180,12 @@ ErrorMessageOr<uint64_t> FindFunctionAddressWithFallback(pid_t pid, std::string_
                                                                kLibcSoname, kDlcloseInLibc));
 
   // Allocate small memory area in the tracee.
-  auto code_address_or_error = AllocateInTraceeAsUniqueResource(pid, 0, kCodeScratchPadSize);
-  if (code_address_or_error.has_error()) {
+  auto code_memory_or_error = AllocateInTraceeAsUniqueResource(pid, 0, kCodeScratchPadSize);
+  if (code_memory_or_error.has_error()) {
     return ErrorMessage(absl::StrFormat("Failed to allocate memory in tracee: %s",
-                                        code_address_or_error.error().message()));
+                                        code_memory_or_error.error().message()));
   }
-  auto code_address = std::move(code_address_or_error.value());
+  auto code_memory = std::move(code_memory_or_error.value());
 
   // We want to do the following in the tracee:
   // dlclose(handle);
@@ -205,7 +205,7 @@ ErrorMessageOr<uint64_t> FindFunctionAddressWithFallback(pid_t pid, std::string_
       .AppendBytes({0xff, 0xd0})
       .AppendBytes({0xcc});
 
-  OUTCOME_TRY(ExecuteMachineCode(pid, code_address.get(), code));
+  OUTCOME_TRY(ExecuteMachineCode(code_memory.get_mutable(), code));
 
   return outcome::success();
 }

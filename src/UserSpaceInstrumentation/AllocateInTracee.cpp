@@ -130,56 +130,100 @@ namespace {
 
 }  // namespace
 
-[[nodiscard]] ErrorMessageOr<uint64_t> AllocateInTracee(pid_t pid, uint64_t address,
-                                                        uint64_t size) {
+ErrorMessageOr<void> MemoryInTracee::Allocate(pid_t pid, uint64_t address, uint64_t size) {
   // Syscall will be equivalent to:
   // `mmap(address, size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0)`
   constexpr uint64_t kSyscallNumberMmap = 9;
-  auto result_or_error = SyscallInTracee(
-      pid, kSyscallNumberMmap, address, size, PROT_READ | PROT_WRITE | PROT_EXEC,
-      MAP_PRIVATE | MAP_ANONYMOUS, static_cast<uint64_t>(-1), 0, /*exclude_address=*/0);
+  auto result_or_error = SyscallInTracee(pid, kSyscallNumberMmap, address, size, PROT_WRITE,
+                                         MAP_PRIVATE | MAP_ANONYMOUS, static_cast<uint64_t>(-1), 0,
+                                         /*exclude_address=*/0);
   if (result_or_error.has_error()) {
     return ErrorMessage(absl::StrFormat(
         "Failed to execute mmap syscall with parameters address=%#x size=%u: \"%s\"", address, size,
         result_or_error.error().message()));
   }
-  const uint64_t result = result_or_error.value();
-  if (address != 0 && result != address) {
-    auto free_memory_result = FreeInTracee(pid, result, size);
+  pid_ = pid;
+  address_ = result_or_error.value();
+  size_ = size;
+  state_ = MemoryInTracee::State::kWritable;
+
+  if (address != 0 && address_ != address) {
+    auto free_memory_result = Free();
     FAIL_IF(free_memory_result.has_error(), "Unable to free proviously allocated memory: \"%s\"",
             free_memory_result.error().message());
     return ErrorMessage(
         absl::StrFormat("AllocateInTracee wanted to allocate memory at %#x but got memory at a "
                         "different adress: %#x. The memory has been freed again.",
-                        address, result));
-  }
-  return result;
-}
-
-[[nodiscard]] ErrorMessageOr<void> FreeInTracee(pid_t pid, uint64_t address, uint64_t size) {
-  // Syscall will be equivalent to:
-  // `munmap(address, size)`
-  constexpr uint64_t kSyscallNumberMunmap = 11;
-  auto result_or_error =
-      SyscallInTracee(pid, kSyscallNumberMunmap, address, size, 0, 0, 0, 0, address);
-  if (result_or_error.has_error()) {
-    return ErrorMessage(absl::StrFormat("Failed to execute munmap syscall: \"%s\"",
-                                        result_or_error.error().message()));
+                        address, address_));
   }
   return outcome::success();
 }
 
-ErrorMessageOr<orbit_base::unique_resource<uint64_t, std::function<void(uint64_t)>>>
+ErrorMessageOr<void> MemoryInTracee::Free() {
+  // Syscall will be equivalent to:
+  // `munmap(address, size)`
+  constexpr uint64_t kSyscallNumberMunmap = 11;
+  auto result_or_error =
+      SyscallInTracee(pid_, kSyscallNumberMunmap, address_, size_, 0, 0, 0, 0, address_);
+  if (result_or_error.has_error()) {
+    return ErrorMessage(absl::StrFormat("Failed to execute munmap syscall: \"%s\"",
+                                        result_or_error.error().message()));
+  }
+  pid_ = -1;
+  address_ = 0;
+  size_ = 0;
+  state_ = State::kInvalid;
+  return outcome::success();
+}
+
+ErrorMessageOr<void> MemoryInTracee::MakeMemoryExecutable() {
+  if (state_ == State::kExecutable) {
+    return outcome::success();
+  }
+
+  constexpr uint64_t kSyscallNumberMprotect = 10;
+  auto result_or_error = SyscallInTracee(pid_, kSyscallNumberMprotect, address_, size_,
+                                         PROT_READ | PROT_EXEC, 0, 0, 0, 0);
+  if (result_or_error.has_error()) {
+    return ErrorMessage(absl::StrFormat(
+        "Failed to execute mprotect syscall with parameters address=%#x size=%u: \"%s\"", address_,
+        size_, result_or_error.error().message()));
+  }
+
+  state_ = State::kExecutable;
+  return outcome::success();
+}
+
+ErrorMessageOr<void> MemoryInTracee::MakeMemoryWritable() {
+  if (state_ == State::kWritable) {
+    return outcome::success();
+  }
+
+  constexpr uint64_t kSyscallNumberMprotect = 10;
+  auto result_or_error =
+      SyscallInTracee(pid_, kSyscallNumberMprotect, address_, size_, PROT_WRITE, 0, 0, 0, 0);
+  if (result_or_error.has_error()) {
+    return ErrorMessage(absl::StrFormat(
+        "Failed to execute mprotect syscall with parameters address=%#x size=%u: \"%s\"", address_,
+        size_, result_or_error.error().message()));
+  }
+
+  state_ = State::kWritable;
+  return outcome::success();
+}
+
+ErrorMessageOr<orbit_base::unique_resource<MemoryInTracee, std::function<void(MemoryInTracee&)>>>
 AllocateInTraceeAsUniqueResource(pid_t pid, uint64_t address, uint64_t size) {
-  OUTCOME_TRY(allocated_address, AllocateInTracee(pid, address, size));
-  std::function<void(uint64_t)> deleter = [pid, size](uint64_t address) {
-    auto result = FreeInTracee(pid, address, size);
+  MemoryInTracee memory;
+  OUTCOME_TRY(memory.Allocate(pid, address, size));
+  std::function<void(MemoryInTracee&)> deleter = [](MemoryInTracee& memory) {
+    auto result = memory.Free();
     if (result.has_error()) {
       ERROR("Unable to free previously allocated memory in tracee: \"%s\"",
             result.error().message());
     }
   };
-  return orbit_base::unique_resource(allocated_address, deleter);
+  return orbit_base::unique_resource(std::move(memory), deleter);
 }
 
 }  // namespace orbit_user_space_instrumentation

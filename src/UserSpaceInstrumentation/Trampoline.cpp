@@ -596,11 +596,14 @@ ErrorMessageOr<AddressRange> FindAddressRangeForTrampoline(
                                       code_range.start, code_range.end));
 }
 
-ErrorMessageOr<uint64_t> AllocateMemoryForTrampolines(pid_t pid, const AddressRange& code_range,
-                                                      uint64_t size) {
+ErrorMessageOr<MemoryInTracee> AllocateMemoryForTrampolines(pid_t pid,
+                                                            const AddressRange& code_range,
+                                                            uint64_t size) {
   OUTCOME_TRY(unavailable_ranges, GetUnavailableAddressRanges(pid));
   OUTCOME_TRY(address_range, FindAddressRangeForTrampoline(unavailable_ranges, code_range, size));
-  return AllocateInTracee(pid, address_range.start, size);
+  MemoryInTracee memory;
+  OUTCOME_TRY(memory.Allocate(pid, address_range.start, size));
+  return std::move(memory);
 }
 
 ErrorMessageOr<int32_t> AddressDifferenceAsInt32(uint64_t a, uint64_t b) {

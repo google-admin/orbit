@@ -53,6 +53,7 @@ class unique_resource {
   ~unique_resource() noexcept { RunDeleter(); }
 
   Resource get() const noexcept { return resource_.value(); }
+  Resource& get_mutable() noexcept { return resource_.value(); }
   Deleter& get_deleter() noexcept { return deleter_; }
   const Deleter& get_deleter() const noexcept { return deleter_; }
 

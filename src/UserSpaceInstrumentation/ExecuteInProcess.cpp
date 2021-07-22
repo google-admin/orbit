@@ -53,9 +53,9 @@ ErrorMessageOr<uint64_t> ExecuteInProcess(pid_t pid, void* function_address, uin
       .AppendBytes({0xff, 0xd0})
       .AppendBytes({0xcc});
 
-  OUTCOME_TRY(address, AllocateInTraceeAsUniqueResource(pid, 0, kCodeScratchPadSize));
+  OUTCOME_TRY(memory, AllocateInTraceeAsUniqueResource(pid, 0, kCodeScratchPadSize));
 
-  OUTCOME_TRY(return_value, ExecuteMachineCode(pid, address.get(), code));
+  OUTCOME_TRY(return_value, ExecuteMachineCode(memory.get_mutable(), code));
 
   return return_value;
 }

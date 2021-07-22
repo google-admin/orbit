@@ -35,9 +35,9 @@ TEST(ExecuteMachineCodeTest, ExecuteMachineCode) {
   {
     // Allocate a small chunk of memory.
     constexpr uint64_t kScratchPadSize = 1024;
-    auto address_or_error = AllocateInTraceeAsUniqueResource(pid, 0, kScratchPadSize);
-    CHECK(address_or_error.has_value());
-    const uint64_t address = address_or_error.value().get();
+    auto memory_or_error = AllocateInTraceeAsUniqueResource(pid, 0, kScratchPadSize);
+    CHECK(memory_or_error.has_value());
+    auto memory = std::move(memory_or_error.value());
 
     // This code moves a constant into rax and enters a breakpoint. The value in rax is interpreted
     // as a return value.
@@ -45,12 +45,9 @@ TEST(ExecuteMachineCodeTest, ExecuteMachineCode) {
     // int 3 cc
     MachineCode code;
     code.AppendBytes({0x48, 0xb8}).AppendImmediate64(0x4242424242424242).AppendBytes({0xcc});
-    ErrorMessageOr<uint64_t> result_or_error = ExecuteMachineCode(pid, address, code);
+    ErrorMessageOr<uint64_t> result_or_error = ExecuteMachineCode(memory.get_mutable(), code);
     ASSERT_THAT(result_or_error, HasNoError());
     EXPECT_EQ(0x4242424242424242, result_or_error.value());
-
-    result_or_error = ExecuteMachineCode(-1, address, code);
-    EXPECT_THAT(result_or_error, HasError("Unable to open file"));
   }
 
   // Cleanup, end child process.
