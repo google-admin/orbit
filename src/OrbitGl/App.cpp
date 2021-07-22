@@ -353,6 +353,7 @@ Future<void> OrbitApp::OnCaptureComplete() {
   for (ThreadTrack* thread_track : GetMutableTimeGraph()->GetTrackManager()->GetThreadTracks()) {
     thread_track->OnCaptureComplete();
   }
+  capture_data_->OnCaptureComplete(GetMutableTimeGraph()->GetAllThreadTrackTimerChains());
 
   GetMutableCaptureData().FilterBrokenCallstacks();
   PostProcessedSamplingData post_processed_sampling_data =

@@ -26,6 +26,7 @@
 #include "ClientData/ModuleManager.h"
 #include "ClientData/PostProcessedSamplingData.h"
 #include "ClientData/ProcessData.h"
+#include "ClientData/TimerChain.h"
 #include "ClientData/TimestampIntervalSet.h"
 #include "ClientData/TracepointCustom.h"
 #include "ClientData/TracepointData.h"
@@ -143,6 +144,8 @@ class CaptureData {
       uint64_t instrumented_function_id) const;
 
   void UpdateFunctionStats(uint64_t instrumented_function_id, uint64_t elapsed_nanos);
+
+  void OnCaptureComplete(std::vector<orbit_client_data::TimerChain*> chains);
 
   [[nodiscard]] const orbit_client_data::CallstackData* GetCallstackData() const {
     return callstack_data_.get();
