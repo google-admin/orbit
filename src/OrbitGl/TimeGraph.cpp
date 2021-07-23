@@ -45,6 +45,7 @@
 ABSL_DECLARE_FLAG(bool, enable_warning_threshold);
 
 using orbit_capture_client::CaptureEventProcessor;
+using orbit_client_data::TimerChain;
 using orbit_client_model::CaptureData;
 using orbit_client_protos::CallstackEvent;
 using orbit_client_protos::FunctionInfo;
@@ -487,8 +488,8 @@ void TimeGraph::ProcessAsyncTimer(const std::string& track_name, const TimerInfo
   track->OnTimer(timer_info);
 }
 
-std::vector<orbit_client_data::TimerChain*> TimeGraph::GetAllThreadTrackTimerChains() const {
-  std::vector<orbit_client_data::TimerChain*> chains;
+std::vector<const TimerChain*> TimeGraph::GetAllThreadTrackTimerChains() const {
+  std::vector<const TimerChain*> chains;
   for (const auto& track : track_manager_->GetThreadTracks()) {
     orbit_base::Append(chains, track->GetChains());
   }
@@ -538,12 +539,11 @@ void TimeGraph::SelectAndMakeVisible(const TimerInfo* timer_info) {
 
 const TimerInfo* TimeGraph::FindPreviousFunctionCall(uint64_t function_address,
                                                      uint64_t current_time,
-                                                     std::optional<int32_t> thread_id) {
+                                                     std::optional<int32_t> thread_id) const {
   const orbit_client_protos::TimerInfo* previous_timer = nullptr;
   uint64_t goal_time = std::numeric_limits<uint64_t>::lowest();
-  std::vector<orbit_client_data::TimerChain*> chains = GetAllThreadTrackTimerChains();
-  for (auto& chain : chains) {
-    if (!chain) continue;
+  std::vector<const TimerChain*> chains = GetAllThreadTrackTimerChains();
+  for (const TimerChain* chain : chains) {
     for (const auto& block : *chain) {
       if (!block.Intersects(goal_time, current_time)) continue;
       for (uint64_t i = 0; i < block.size(); i++) {
@@ -562,11 +562,11 @@ const TimerInfo* TimeGraph::FindPreviousFunctionCall(uint64_t function_address,
 }
 
 const TimerInfo* TimeGraph::FindNextFunctionCall(uint64_t function_address, uint64_t current_time,
-                                                 std::optional<int32_t> thread_id) {
+                                                 std::optional<int32_t> thread_id) const {
   const orbit_client_protos::TimerInfo* next_timer = nullptr;
   uint64_t goal_time = std::numeric_limits<uint64_t>::max();
-  std::vector<orbit_client_data::TimerChain*> chains = GetAllThreadTrackTimerChains();
-  for (auto& chain : chains) {
+  std::vector<const TimerChain*> chains = GetAllThreadTrackTimerChains();
+  for (const TimerChain* chain : chains) {
     CHECK(chain != nullptr);
     for (const auto& block : *chain) {
       if (!block.Intersects(current_time, goal_time)) continue;
@@ -1000,14 +1000,13 @@ const TimerInfo* TimeGraph::FindDown(const TimerInfo& from) {
   return track_manager_->GetOrCreateThreadTrack(from.thread_id())->GetDown(from);
 }
 
-std::pair<const orbit_client_protos::TimerInfo*, const orbit_client_protos::TimerInfo*>
-TimeGraph::GetMinMaxTimerInfoForFunction(uint64_t function_id) {
+std::pair<const TimerInfo*, const TimerInfo*> TimeGraph::GetMinMaxTimerInfoForFunction(
+    uint64_t function_id) const {
   const orbit_client_protos::TimerInfo* min_timer = nullptr;
   const orbit_client_protos::TimerInfo* max_timer = nullptr;
-  std::vector<orbit_client_data::TimerChain*> chains = GetAllThreadTrackTimerChains();
-  for (auto& chain : chains) {
-    CHECK(chain);
-    for (auto& block : *chain) {
+  std::vector<const TimerChain*> chains = GetAllThreadTrackTimerChains();
+  for (const TimerChain* chain : chains) {
+    for (const auto& block : *chain) {
       for (size_t i = 0; i < block.size(); i++) {
         const orbit_client_protos::TimerInfo& timer_info = block[i];
         if (timer_info.function_id() != function_id) continue;

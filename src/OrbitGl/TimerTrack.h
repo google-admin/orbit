@@ -107,7 +107,7 @@ class TimerTrack : public Track {
 
   float GetHeight() const override;
 
-  [[nodiscard]] std::vector<orbit_client_data::TimerChain*> GetChains() {
+  [[nodiscard]] std::vector<const orbit_client_data::TimerChain*> GetChains() const {
     return track_data_->GetChains();
   }
 

@@ -29,19 +29,17 @@ class TrackData {
     return timer_chain->emplace_back(std::move(timer_info));
   }
 
-  // TODO(b/194090304): Make this const once TimerChain no longer stores TextBoxes
-  [[nodiscard]] std::vector<TimerChain*> GetChains() {
-    std::vector<TimerChain*> chains;
+  [[nodiscard]] std::vector<const TimerChain*> GetChains() const {
+    std::vector<const TimerChain*> chains;
     absl::MutexLock lock(&mutex_);
-    for (auto& it : timers_) {
+    for (const auto& it : timers_) {
       chains.push_back(it.second.get());
     }
 
     return chains;
   }
 
-  // TODO(b/194090304): Make this const once TimerChain no longer stores TextBoxes
-  [[nodiscard]] TimerChain* GetChain(uint64_t depth) {
+  [[nodiscard]] const TimerChain* GetChain(uint64_t depth) const {
     absl::MutexLock lock(&mutex_);
     auto it = timers_.find(depth);
     if (it != timers_.end()) {

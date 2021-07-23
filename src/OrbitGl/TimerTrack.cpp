@@ -267,7 +267,7 @@ void TimerTrack::UpdatePrimitives(Batcher* batcher, uint64_t min_tick, uint64_t 
 
   draw_data.z = GlCanvas::kZValueBox + z_offset;
 
-  std::vector<orbit_client_data::TimerChain*> chains = track_data_->GetChains();
+  std::vector<const orbit_client_data::TimerChain*> chains = track_data_->GetChains();
   draw_data.selected_timer = app_->selected_timer();
   draw_data.highlighted_function_id = app_->GetFunctionIdToHighlight();
 
@@ -279,7 +279,7 @@ void TimerTrack::UpdatePrimitives(Batcher* batcher, uint64_t min_tick, uint64_t 
   draw_data.ns_per_pixel = time_window_ns / viewport_->GetScreenWidth();
   draw_data.min_timegraph_tick = time_graph_->GetTickFromUs(time_graph_->GetMinTimeUs());
 
-  for (TimerChain* chain : chains) {
+  for (const TimerChain* chain : chains) {
     CHECK(chain != nullptr);
     // In order to draw overlaps correctly, we need for every text box to be drawn (current),
     // its previous and next text box. In order to avoid looking ahead for the next text (which is
@@ -348,11 +348,11 @@ std::string TimerTrack::GetTooltip() const {
 }
 
 const TimerInfo* TimerTrack::GetFirstAfterTime(uint64_t time, uint32_t depth) const {
-  orbit_client_data::TimerChain* chain = track_data_->GetChain(depth);
+  const orbit_client_data::TimerChain* chain = track_data_->GetChain(depth);
   if (chain == nullptr) return nullptr;
 
   // TODO: do better than linear search...
-  for (auto& it : *chain) {
+  for (const auto& it : *chain) {
     for (size_t k = 0; k < it.size(); ++k) {
       const TimerInfo& timer_info = it[k];
       if (timer_info.start() > time) {
@@ -364,19 +364,19 @@ const TimerInfo* TimerTrack::GetFirstAfterTime(uint64_t time, uint32_t depth) co
 }
 
 const TimerInfo* TimerTrack::GetFirstBeforeTime(uint64_t time, uint32_t depth) const {
-  orbit_client_data::TimerChain* chain = track_data_->GetChain(depth);
+  const orbit_client_data::TimerChain* chain = track_data_->GetChain(depth);
   if (chain == nullptr) return nullptr;
 
   const TimerInfo* first_timer_before_time = nullptr;
 
   // TODO: do better than linear search...
-  for (auto& it : *chain) {
+  for (const auto& it : *chain) {
     for (size_t k = 0; k < it.size(); ++k) {
-      const TimerInfo& timer_info = it[k];
-      if (timer_info.start() > time) {
+      const TimerInfo* timer_info = &it[k];
+      if (timer_info->start() > time) {
         return first_timer_before_time;
       }
-      first_timer_before_time = &timer_info;
+      first_timer_before_time = timer_info;
     }
   }
 
@@ -394,7 +394,7 @@ const TimerInfo* TimerTrack::GetDown(const TimerInfo& timer_info) const {
 std::vector<const orbit_client_protos::TimerInfo*> TimerTrack::GetScopesInRange(
     uint64_t start_ns, uint64_t end_ns) const {
   std::vector<const orbit_client_protos::TimerInfo*> result;
-  for (TimerChain* chain : track_data_->GetChains()) {
+  for (const TimerChain* chain : track_data_->GetChains()) {
     CHECK(chain != nullptr);
     for (const auto& block : *chain) {
       if (!block.Intersects(start_ns, end_ns)) continue;
@@ -441,6 +441,7 @@ internal::DrawData TimerTrack::GetDrawData(uint64_t min_tick, uint64_t max_tick,
   draw_data.min_timegraph_tick = time_graph->GetTickFromUs(time_graph->GetMinTimeUs());
   return draw_data;
 }
+
 size_t TimerTrack::GetNumberOfTimers() const { return track_data_->GetNumberOfTimers(); }
 uint64_t TimerTrack::GetMinTime() const { return track_data_->GetMinTime(); }
 uint64_t TimerTrack::GetMaxTime() const { return track_data_->GetMaxTime(); }

@@ -21,6 +21,7 @@
 #include "absl/strings/str_format.h"
 #include "capture_data.pb.h"
 
+using orbit_client_data::TimerChain;
 using orbit_client_protos::TimerInfo;
 
 constexpr const char* kSwQueueString = "sw queue";
@@ -181,7 +182,7 @@ float GpuSubmissionTrack::GetHeight() const {
 const TimerInfo* GpuSubmissionTrack::GetLeft(const TimerInfo& timer_info) const {
   uint64_t timeline_hash = timer_info.user_data_key();
   if (timeline_hash == timeline_hash_) {
-    orbit_client_data::TimerChain* chain = track_data_->GetChain(timer_info.depth());
+    const TimerChain* chain = track_data_->GetChain(timer_info.depth());
     if (chain != nullptr) return chain->GetElementBefore(timer_info);
   }
   return nullptr;
@@ -190,7 +191,7 @@ const TimerInfo* GpuSubmissionTrack::GetLeft(const TimerInfo& timer_info) const 
 const TimerInfo* GpuSubmissionTrack::GetRight(const TimerInfo& timer_info) const {
   uint64_t timeline_hash = timer_info.user_data_key();
   if (timeline_hash == timeline_hash_) {
-    orbit_client_data::TimerChain* chain = track_data_->GetChain(timer_info.depth());
+    const TimerChain* chain = track_data_->GetChain(timer_info.depth());
     if (chain != nullptr) return chain->GetElementAfter(timer_info);
   }
   return nullptr;

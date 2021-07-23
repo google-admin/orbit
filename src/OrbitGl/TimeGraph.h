@@ -44,7 +44,7 @@ class TimeGraph : public orbit_gl::CaptureViewElement {
   ~TimeGraph() override;
 
   void Draw(Batcher& batcher, TextRenderer& text_renderer, uint64_t current_mouse_time_ns,
-            PickingMode picking_mode = PickingMode::kNone, float /*z_offset*/ = 0) override;
+            PickingMode picking_mode = PickingMode::kNone, float z_offset = 0) override;
   void DrawTracks(Batcher& batcher, TextRenderer& text_renderer, uint64_t current_mouse_time_ns,
                   PickingMode picking_mode = PickingMode::kNone);
   void DrawOverlay(Batcher& batcher, TextRenderer& text_renderer, PickingMode picking_mode);
@@ -104,10 +104,10 @@ class TimeGraph : public orbit_gl::CaptureViewElement {
                            JumpScope jump_scope);
   [[nodiscard]] const orbit_client_protos::TimerInfo* FindPreviousFunctionCall(
       uint64_t function_address, uint64_t current_time,
-      std::optional<int32_t> thread_id = std::nullopt);
+      std::optional<int32_t> thread_id = std::nullopt) const;
   [[nodiscard]] const orbit_client_protos::TimerInfo* FindNextFunctionCall(
       uint64_t function_address, uint64_t current_time,
-      std::optional<int32_t> thread_id = std::nullopt);
+      std::optional<int32_t> thread_id = std::nullopt) const;
   void SelectAndZoom(const orbit_client_protos::TimerInfo* timer_info);
   [[nodiscard]] double GetCaptureTimeSpanUs() const;
   [[nodiscard]] double GetCurrentTimeSpanUs() const;
@@ -122,7 +122,8 @@ class TimeGraph : public orbit_gl::CaptureViewElement {
   [[nodiscard]] int GetNumDrawnTextBoxes() const { return num_drawn_text_boxes_; }
   [[nodiscard]] TextRenderer* GetTextRenderer() { return &text_renderer_static_; }
   [[nodiscard]] Batcher& GetBatcher() { return batcher_; }
-  [[nodiscard]] std::vector<orbit_client_data::TimerChain*> GetAllThreadTrackTimerChains() const;
+  [[nodiscard]] std::vector<const orbit_client_data::TimerChain*> GetAllThreadTrackTimerChains()
+      const;
 
   void UpdateHorizontalScroll(float ratio);
   [[nodiscard]] double GetMinTimeUs() const { return min_time_us_; }
@@ -142,7 +143,7 @@ class TimeGraph : public orbit_gl::CaptureViewElement {
       const orbit_client_protos::TimerInfo& from);
   [[nodiscard]] std::pair<const orbit_client_protos::TimerInfo*,
                           const orbit_client_protos::TimerInfo*>
-  GetMinMaxTimerInfoForFunction(uint64_t function_id);
+  GetMinMaxTimerInfoForFunction(uint64_t function_id) const;
 
   [[nodiscard]] static Color GetColor(uint32_t id) {
     constexpr unsigned char kAlpha = 255;
