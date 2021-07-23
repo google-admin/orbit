@@ -164,7 +164,12 @@ void SessionSetupDialog::SetStateMachineInitialState() {
 SessionSetupDialog::~SessionSetupDialog() noexcept = default;
 
 std::optional<TargetConfiguration> SessionSetupDialog::Exec() {
-  ui_->stadiaWidget->Start();
+  auto start_stadia_widget_result = ui_->stadiaWidget->Start();
+  if (start_stadia_widget_result.has_error()) {
+    ERROR("Unable to start ConnectToStadiaWidget: %s",
+          start_stadia_widget_result.error().message());
+  }
+
   state_machine_.start();
 
   if (process_manager_ != nullptr) {

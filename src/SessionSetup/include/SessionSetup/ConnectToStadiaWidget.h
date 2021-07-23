@@ -44,6 +44,9 @@ class ConnectToStadiaWidget : public QWidget {
 
  public:
   explicit ConnectToStadiaWidget(QWidget* parent = nullptr);
+  // This constructor is intended for use with unit tests. ggp_executable_path should be a mock ggp
+  // executable.
+  explicit ConnectToStadiaWidget(QString ggp_executable_path);
   ~ConnectToStadiaWidget() noexcept override;
   [[nodiscard]] std::optional<StadiaConnection> StopAndClearConnection();
   [[nodiscard]] bool IsActive() const;
@@ -51,7 +54,7 @@ class ConnectToStadiaWidget : public QWidget {
   void SetSshConnectionArtifacts(SshConnectionArtifacts* ssh_connection_artifacts);
   void ClearSshConnectionArtifacts() { ssh_connection_artifacts_ = nullptr; }
   void SetConnection(StadiaConnection connection);
-  void Start();
+  [[nodiscard]] ErrorMessageOr<void> Start();
   [[nodiscard]] std::optional<orbit_ggp::Instance> GetSelectedInstance() const {
     return selected_instance_;
   }
@@ -93,6 +96,7 @@ class ConnectToStadiaWidget : public QWidget {
   std::unique_ptr<ServiceDeployManager> service_deploy_manager_;
   std::shared_ptr<grpc::Channel> grpc_channel_;
   QPointer<orbit_ggp::Client> ggp_client_ = nullptr;
+  QString ggp_executable_path_;
   std::optional<QString> remembered_instance_id_;
 
   // State Machine & States

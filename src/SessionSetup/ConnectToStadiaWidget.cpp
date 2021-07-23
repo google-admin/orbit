@@ -93,6 +93,11 @@ ConnectToStadiaWidget::ConnectToStadiaWidget(QWidget* parent)
   SetupStateMachine();
 }
 
+ConnectToStadiaWidget::ConnectToStadiaWidget(QString ggp_executable_path)
+    : ConnectToStadiaWidget() {
+  ggp_executable_path_ = std::move(ggp_executable_path);
+}
+
 void ConnectToStadiaWidget::SetActive(bool value) {
   ui_->contentFrame->setEnabled(value);
   ui_->radioButton->setChecked(value);
@@ -118,17 +123,28 @@ void ConnectToStadiaWidget::SetConnection(StadiaConnection connection) {
       });
 }
 
-void ConnectToStadiaWidget::Start() {
+ErrorMessageOr<void> ConnectToStadiaWidget::Start() {
   if (ssh_connection_artifacts_ == nullptr) {
-    ERROR("Unable to start ConnectToStadiaWidget: ssh_connection_artifacts_ is nullptr");
-    return;
+    std::string error{
+        "Internal error: Unable to start ConnectToStadiaWidget, ssh_connection_artifacts_ is not "
+        "set."};
+    ui_->radioButton->setToolTip(QString::fromStdString(error));
+    setEnabled(false);
+    return ErrorMessage(error);
   }
 
-  auto client_result = orbit_ggp::Client::Create(this);
+  ErrorMessageOr<QPointer<orbit_ggp::Client>> client_result =
+      ErrorMessage("Internal error: Unable to create orbit_ggp::Client instance");
+  if (ggp_executable_path_.isEmpty()) {
+    client_result = orbit_ggp::Client::Create(this);
+  } else {
+    client_result = orbit_ggp::Client::Create(this, ggp_executable_path_);
+  }
   if (client_result.has_error()) {
-    ui_->radioButton->setToolTip(QString::fromStdString(client_result.error().message()));
+    std::string error = "Unable to use ggp cli: " + client_result.error().message();
+    ui_->radioButton->setToolTip(QString::fromStdString(error));
     setEnabled(false);
-    return;
+    return ErrorMessage{error};
   }
   ggp_client_ = client_result.value();
 
@@ -138,7 +154,9 @@ void ConnectToStadiaWidget::Start() {
     state_machine_.setInitialState(&s_instances_loading_);
   }
 
+  setEnabled(true);
   state_machine_.start();
+  return outcome::success();
 }
 
 std::optional<StadiaConnection> ConnectToStadiaWidget::StopAndClearConnection() {
