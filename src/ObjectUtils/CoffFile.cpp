@@ -10,6 +10,7 @@
 #include <llvm/Object/Binary.h>
 #include <llvm/Object/COFF.h>
 #include <llvm/Object/ObjectFile.h>
+#include <llvm/Support/Error.h>
 
 #include "OrbitBase/Logging.h"
 #include "OrbitBase/Result.h"
@@ -113,9 +114,7 @@ std::string CoffFileImpl::GetName() const { return file_path_.filename().string(
 uint64_t CoffFileImpl::GetLoadBias() const { return object_file_->getImageBase(); }
 uint64_t CoffFileImpl::GetExecutableSegmentOffset() const {
   CHECK(object_file_->is64());
-  const llvm::object::pe32plus_header* pe32plus_header;
-  object_file_->getPE32PlusHeader(pe32plus_header);
-  return pe32plus_header->BaseOfCode;
+  return object_file_->getPE32PlusHeader()->BaseOfCode;
 }
 
 bool CoffFileImpl::IsElf() const { return false; }
@@ -124,13 +123,8 @@ bool CoffFileImpl::IsCoff() const { return true; }
 }  // namespace
 
 ErrorMessageOr<std::unique_ptr<CoffFile>> CreateCoffFile(const std::filesystem::path& file_path) {
-  // TODO(hebecker): Remove this explicit construction of StringRef when we
-  // switch to LLVM10.
-  const std::string file_path_str = file_path.string();
-  const llvm::StringRef file_path_llvm{file_path_str};
-
   llvm::Expected<llvm::object::OwningBinary<llvm::object::ObjectFile>> object_file_or_error =
-      llvm::object::ObjectFile::createObjectFile(file_path_llvm);
+      llvm::object::ObjectFile::createObjectFile(file_path.string());
 
   if (!object_file_or_error) {
     return ErrorMessage(absl::StrFormat("Unable to load COFF file \"%s\": %s", file_path.string(),

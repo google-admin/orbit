@@ -87,8 +87,7 @@ class OrbitConan(ConanFile):
         self.requires("capstone/4.0.1@{}#0".format(self._orbit_channel))
         self.requires("grpc/1.27.3@{}".format(self._orbit_channel))
         self.requires("c-ares/1.15.0")
-        self.requires("llvm_object/9.0.1-3@orbitdeps/stable")
-        self.requires("llvm_symbolize/9.0.1-3@orbitdeps/stable")
+        self.requires("llvm-core/12.0.0")
         self.requires("lzma_sdk/19.00@orbitdeps/stable#a7bc173325d7463a0757dee5b08bf7fd")
         self.requires("openssl/1.1.1k")
         self.requires("Outcome/3dae433e@orbitdeps/stable#0")
@@ -136,6 +135,10 @@ class OrbitConan(ConanFile):
                 "We don't actively support building the UI for 32bit platforms. Please remove this check in conanfile.py if you still want to do so!")
 
         self.options["gtest"].no_main = True
+
+        if self.settings.os != "Windows":
+            self.options["llvm-core"].with_xml2 = False
+
         if self.options.with_gui:
 
             if not self.options.system_qt:

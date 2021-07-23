@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-FROM ubuntu:20.04
+FROM ubuntu:21.04
 
 RUN useradd -Ums /bin/bash conan && \
     apt-get -qq update && \
@@ -18,7 +18,10 @@ RUN useradd -Ums /bin/bash conan && \
         make \
         ninja-build \
         python3-pip \
-        zip && \
+        zip \
+        llvm `# Needed to cross-compile llvm` \
+        clang `# Needed to cross-compile llvm` \
+    && \
     python3 -m pip install conan==1.36.0 && \
     rm -rf /var/lib/apt/lists/*
 

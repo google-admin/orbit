@@ -10,8 +10,6 @@ abseil:compiler.cppstd=17
 [options]
 OrbitProfiler:with_gui=False
 OrbitProfiler:run_tests=False
-llvm_object:allow_undefined_symbols=True
-llvm_symbolize:allow_undefined_symbols=True
 
 [build_requires]
 

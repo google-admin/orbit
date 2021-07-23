@@ -3,8 +3,6 @@ include(clang9_relwithdebinfo)
 [options]
 OrbitProfiler:with_gui=False
 OrbitProfiler:run_tests=False
-llvm_object:allow_undefined_symbols=True
-llvm_symbolize:allow_undefined_symbols=True
 
 [env]
 CFLAGS=[-fPIC]
