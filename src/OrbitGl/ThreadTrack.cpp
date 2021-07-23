@@ -31,7 +31,6 @@
 #include "capture_data.pb.h"
 
 using orbit_client_data::TimerChain;
-using orbit_client_data::TrackData;
 using orbit_client_model::CaptureData;
 using orbit_client_protos::FunctionInfo;
 using orbit_client_protos::TimerInfo;
@@ -86,7 +85,7 @@ void ThreadTrack::InitializeNameAndLabel(int32_t thread_id) {
 
 const TimerInfo* ThreadTrack::GetLeft(const TimerInfo& timer_info) const {
   if (timer_info.thread_id() == thread_id_) {
-    orbit_client_data::TimerChain* chain = track_data_->GetChain(timer_info.depth());
+    const TimerChain* chain = track_data_->GetChain(timer_info.depth());
     if (chain != nullptr) return chain->GetElementBefore(timer_info);
   }
   return nullptr;
@@ -94,7 +93,7 @@ const TimerInfo* ThreadTrack::GetLeft(const TimerInfo& timer_info) const {
 
 const TimerInfo* ThreadTrack::GetRight(const TimerInfo& timer_info) const {
   if (timer_info.thread_id() == thread_id_) {
-    orbit_client_data::TimerChain* chain = track_data_->GetChain(timer_info.depth());
+    const TimerChain* chain = track_data_->GetChain(timer_info.depth());
     if (chain != nullptr) return chain->GetElementAfter(timer_info);
   }
   return nullptr;
@@ -421,9 +420,8 @@ void ThreadTrack::OnTimer(const TimerInfo& timer_info) {
   // Thread tracks use a ScopeTree so we don't need to create one TimerChain per depth.
   // Allocate a single TimerChain into which all timers will be appended.
 
-  // Pass ownership to timer_chain. TODO(http://b/194268477): Pass timer_info as a value instead of
-  // reference to be able to move it.
-  auto& timer_info_chain_ref = track_data_->AddTimer(/*depth=*/0, timer_info);
+  // Pass ownership to timer_chain.
+  const auto& timer_info_chain_ref = track_data_->AddTimer(/*depth=*/0, timer_info);
 
   if (scope_tree_update_type_ == ScopeTreeUpdateType::kAlways) {
     absl::MutexLock lock(&scope_tree_mutex_);
@@ -436,11 +434,11 @@ void ThreadTrack::OnCaptureComplete() {
     return;
   }
   // Build ScopeTree from timer chains.
-  std::vector<TimerChain*> timer_chains = track_data_->GetChains();
-  for (TimerChain* timer_chain : timer_chains) {
+  std::vector<const TimerChain*> timer_chains = track_data_->GetChains();
+  for (const TimerChain* timer_chain : timer_chains) {
     CHECK(timer_chain != nullptr);
     absl::MutexLock lock(&scope_tree_mutex_);
-    for (auto& block : *timer_chain) {
+    for (const auto& block : *timer_chain) {
       for (size_t k = 0; k < block.size(); ++k) {
         scope_tree_.Insert(&block[k]);
       }

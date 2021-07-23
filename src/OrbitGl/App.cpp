@@ -107,6 +107,8 @@ using orbit_client_data::PostProcessedSamplingData;
 using orbit_client_data::ProcessData;
 using orbit_client_data::SampledFunction;
 using orbit_client_data::ThreadID;
+using orbit_client_data::TimerBlock;
+using orbit_client_data::TimerChain;
 using orbit_client_data::TracepointInfoSet;
 using orbit_client_data::UserDefinedCaptureData;
 
@@ -2596,16 +2598,14 @@ void OrbitApp::AddFrameTrackTimers(uint64_t instrumented_function_id) {
     return;
   }
 
-  std::vector<orbit_client_data::TimerChain*> chains =
-      GetMutableTimeGraph()->GetAllThreadTrackTimerChains();
+  std::vector<const TimerChain*> chains = GetMutableTimeGraph()->GetAllThreadTrackTimerChains();
 
   std::vector<uint64_t> all_start_times;
 
-  for (const auto& chain : chains) {
-    CHECK(chain != nullptr);
-    for (const orbit_client_data::TimerBlock& block : *chain) {
+  for (const TimerChain* chain : chains) {
+    for (const TimerBlock& block : *chain) {
       for (uint64_t i = 0; i < block.size(); ++i) {
-        const orbit_client_protos::TimerInfo& timer_info = block[i];
+        const TimerInfo& timer_info = block[i];
         if (timer_info.function_id() == instrumented_function_id) {
           all_start_times.push_back(timer_info.start());
         }
